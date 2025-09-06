@@ -67,17 +67,22 @@ int main(int argc, char *argv[])
     // Começa simulação
     _time = 0;          // reseta tempo do SO
     _pcount = 0;        // reseta contador de processos
+
     int nFinished = 0;  // reseta número de terminados
+    int memory_process_total = 0; // Count para processos na memoria
+    int quantum_timer = 0; // Timer para quantum de processo
     PCB* p = NULL;      // variavel auxiliar
 
     // se finalizamos todos os processos, terminamos a simulação
-    while(nFinished < _nprocs) { 
+    while(nFinished < _nprocs) {
         // Adiciona na fila de create todos os processos que possuem inicio nesse tempo
         while(nextT > -1 && _time == nextT) {
             // Cria novo bloco e lê valores dele
-            p = PCB_new();   
+            p = PCB_new();
 
-            int params = sscanf(line, "%d %d %db%d", &nextT, &p->remaining_time, &p->block_moment, &p->block_time);
+            int arrival_time; // Variavel auxiliar para nao usar nextT
+
+            int params = sscanf(line, "%d %d %db%d", &arrival_time, &p->remaining_time, &p->block_moment, &p->block_time);
 
             // se não conseguimos ler valores para o block, reseta o block moment
             if (params < 4)
@@ -85,9 +90,6 @@ int main(int argc, char *argv[])
 
             Push(&_create, p);
             printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
-            
-            /*Debug*/
-            //printf("P:Time:%d Life:%d BT:%d BA:%d\n", _time, p->remaining_time, p->block_moment, p->block_time);
             
             // avança a leitura
             if(sscanf(buffp, "%99[^\n]%n", line, &count) >= 1) {
@@ -99,31 +101,149 @@ int main(int argc, char *argv[])
         }
         
         ///////////////
-        // Implementar o processamento de cada estado (por enquanto está de qualquer jeito)
+        // Implementacao do processamento de cada estado
         //////////////
-        
-        // executando
-        if((p = Pop(&_running)) != NULL) {
-            Push(&_finish, p);
-            p->state = FINISH;
+
+        // Processo executando (running)
+        if(_running != NULL) {
+            _running->remaining_time--;  // Decrementa o tempo de vida
+            _running->cpu_time_executed++;
+            quantum_timer++;             // Incrementa o tempo que processo tá na CPU
+
+            // Se processo terminou, tira da fila de running e coloca na de finished
+            if (_running->remaining_time <= 0) {
+                p = Pop(&_running);
+                p->state = FINISH;
+
+                Push(&_finish, p);
+
+                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+
+                memory_process_total--; // Libera um espaço na memória
+                quantum_timer = 0; // Reseta quantum
+            } else if (_running->block_moment != -1 && (_running->cpu_time_executed == _running->block_moment)) { // Se bloqueou por block_moment, bota na fila de blocked
+                p = Pop(&_running);
+                p->state = BLOCK;
+
+                Push(&_blocked, p);
+
+                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+
+                quantum_timer = 0; // Reseta quantum
+            } else if (quantum_timer == _quantum) { // Caso o quantum estourar para o processo
+                p = Pop(&_running);
+                p->state = READY;
+
+                Push(&_ready, p); // Volta para o fim da fila ready, dando lugar ao proximo processo
+                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+
+                quantum_timer = 0; // Reseta o timer do quantum
+            }
+        }
+
+        // Processo bloqueado (blocked)
+        if (_blocked != NULL) {
+            PCB *current = _blocked;
+            PCB *prev = NULL;
+
+            while (current != NULL) {
+                current->block_time--;
+
+                if (current->block_time <= 0) { // Se processo bloqueado está liberado
+                    PCB* unblocked_process = current;
+                    
+                    // Remove da lista de bloqueados
+                    if (prev == NULL) {
+                        _blocked = current->next;
+                    } else {
+                        prev->next = current->next;
+                    }
+                    current = current->next;
+
+                    // Adiciona na fila de prontos (ready)
+                    unblocked_process->state = READY;
+                    Push(&_ready, unblocked_process);
+
+                    printf("%02d:P%d -> %s (%d)\n", _time, unblocked_process->id, states[unblocked_process->state], unblocked_process->remaining_time);
+                } else {
+                    // Continua para o próximo da lista
+                    prev = current;
+                    current = current->next;
+                }
+            }
+        }
+
+        // Verifica processos suspensos E bloqueados, para mover para suspenso/pronto caso tenha desbloqueio
+        if (_susBlocked != NULL) {
+            PCB *current = _susBlocked;
+            PCB *prev = NULL;
+
+            while (current != NULL) {
+                current->block_time--;
+
+                if (current->block_time <= 0) {
+                    PCB* unblocked_process = current;
+
+                    // Remove da lista de bloqueados/suspensos
+                    if (prev == NULL) {
+                        _susBlocked = current->next;
+                    } else {
+                        prev->next = current->next;
+                    }
+                    current = current->next; // Avança o ponteiro
+
+                    // Move para a fila de PRONTOS/SUSPENSOS (_susReady)
+                    unblocked_process->state = SUS_READY;
+                    Push(&_susReady, unblocked_process);
+
+                    printf("%02d:P%d -> %s (%d)\n", _time, unblocked_process->id, states[unblocked_process->state], unblocked_process->remaining_time);
+                } else {
+                    prev = current;
+                    current = current->next;
+                }
+            }
+        }
+
+        // Checa a fila de criados para admitir novos processos como ready ou ready suspenso
+        while (_create != NULL) {
+            p = Pop(&_create);
+
+            if (memory_process_total < _memSize) {
+                p->state = READY;
+                Push(&_ready, p);
+                memory_process_total++;
+            } else {
+                p->state = SUS_READY;
+                Push(&_susReady, p);
+            }
+
             printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
         }
-        
-        // pronto
-        if(_ready != NULL && _running == NULL) {
-            p = Pop(&_ready);
-            Push(&_running, p);
-            p->state = RUN;
-            printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
-        }
-        
-        // criando
-        while((p = Pop(&_create)) != NULL) {
-            Push(&_ready, p);
+
+        // Checa por fila dos processos suspensos prontos caso a memoria possua slots para executar
+        while (memory_process_total < _memSize && _susReady != NULL) {
+            p = Pop(&_susReady);
             p->state = READY;
+
+            Push(&_ready, p);
+
+            memory_process_total++; 
+
             printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
         }
         
+        // Se nao houver processo executando mas houver processo pronto, adiciona o processo na execucao
+        if (_running == NULL && _ready != NULL) {
+            p = Pop(&_ready);
+            p->state = RUN;
+
+            Push(&_running, p);
+
+            quantum_timer = 0;
+
+            printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+        }
+
         // finalizando
         while((p = Pop(&_finish)) != NULL) {
             free(p);

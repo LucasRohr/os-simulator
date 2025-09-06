@@ -24,6 +24,7 @@ typedef struct PCB {
     int id;
     char state; // usa o enum de estados
     int remaining_time;
+    int cpu_time_executed;
     int block_moment;
     int block_time;
     struct PCB *next; // ponteiro para proximo PCB
