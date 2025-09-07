@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
         // Adiciona na fila de create todos os processos que possuem inicio nesse tempo
         while(nextT > -1 && _time == nextT) {
             // Cria novo bloco e lê valores dele
-            p = PCB_new();
+            p = PCB_new(++_pcount);
 
             int arrival_time; // Variavel auxiliar para nao usar nextT
 
@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 
             // Se processo terminou, tira da fila de running e coloca na de finished
             if (_running->remaining_time <= 0) {
-                p = Pop(&_running);
+                PCB* p = Pop(&_running);
                 p->state = FINISH;
 
                 Push(&_finish, p);
@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
                 memory_process_total--; // Libera um espaço na memória
                 quantum_timer = 0; // Reseta quantum
             } else if (_running->block_moment != -1 && (_running->cpu_time_executed == _running->block_moment)) { // Se bloqueou por block_moment, bota na fila de blocked
-                p = Pop(&_running);
+                PCB* p = Pop(&_running);
                 p->state = BLOCK;
 
                 Push(&_blocked, p);
@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
 
                 quantum_timer = 0; // Reseta quantum
             } else if (quantum_timer == _quantum) { // Caso o quantum estourar para o processo
-                p = Pop(&_running);
+                PCB* p = Pop(&_running);
                 p->state = READY;
 
                 Push(&_ready, p); // Volta para o fim da fila ready, dando lugar ao proximo processo
@@ -204,9 +204,23 @@ int main(int argc, char *argv[])
             }
         }
 
+        // Se a memória está cheia e tem processos esperando para entrar
+        if (memory_process_total >= _memSize && (_create != NULL || _susReady != NULL)) {
+            // Se tiver processo bloqueado
+            if (_blocked != NULL) {
+                PCB* p = Pop(&_blocked);
+                p->state = SUS_BLOCK;
+                Push(&_susBlocked, p); // Adiciona bloqueado na fila de suspensos pois memoria está cheia
+
+                memory_process_total--; // Liberou memória
+
+                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+            }
+        }
+
         // Checa a fila de criados para admitir novos processos como ready ou ready suspenso
         while (_create != NULL) {
-            p = Pop(&_create);
+            PCB* p = Pop(&_create);
 
             if (memory_process_total < _memSize) {
                 p->state = READY;
@@ -222,7 +236,7 @@ int main(int argc, char *argv[])
 
         // Checa por fila dos processos suspensos prontos caso a memoria possua slots para executar
         while (memory_process_total < _memSize && _susReady != NULL) {
-            p = Pop(&_susReady);
+            PCB* p = Pop(&_susReady);
             p->state = READY;
 
             Push(&_ready, p);
@@ -234,7 +248,7 @@ int main(int argc, char *argv[])
         
         // Se nao houver processo executando mas houver processo pronto, adiciona o processo na execucao
         if (_running == NULL && _ready != NULL) {
-            p = Pop(&_ready);
+            PCB* p = Pop(&_ready);
             p->state = RUN;
 
             Push(&_running, p);

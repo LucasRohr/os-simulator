@@ -22,17 +22,24 @@ struct PCB* PCB_new(int id){
 void Push(PCB **queue, PCB *item) {
     if(item == NULL)
         return;
+
+    // Garante que o novo item sempre será o último e não apontará para lixo
+    item->next = NULL;
         
-    if(*queue == NULL)
+    if(*queue == NULL) {
         *queue = item;
-    else {
-        // corre até o fim da fila
-        while((*queue)->next != NULL) 
-            *queue = (*queue)->next;
-    
-        (*queue)->next = item; // coloca no fim da fila
-        item->next = NULL;     // já limpa o next caso venha de outra fila
+        return;
     }
+
+    // Se a fila não está vazia, usa um ponteiro temp para encontrar o fim
+    PCB *current = *queue;
+
+    while (current->next != NULL) {
+        current = current->next;
+    }
+    
+    // Adiciona o novo item no final da lista
+    current->next = item;
 }
 
 // Remove e retorna o primeiro PCB de uma fila
