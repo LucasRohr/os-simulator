@@ -25,13 +25,15 @@ typedef struct PCB {
     char state; // usa o enum de estados
     int remaining_time;
     int cpu_time_executed;
+    int total_execution_time; // SJF
+    int arrival_time;         // FIFO
     int block_moment;
     int block_time;
     struct PCB *next; // ponteiro para proximo PCB
 } PCB;
 
 // Funções de manipulação do PCB e das filas
-struct PCB* PCB_new();
+struct PCB* PCB_new(int id);
 struct PCB* Pop(PCB **queue);
 void Push(PCB **queue, PCB *item);
 

@@ -2,13 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "process.h"
+#include "scaling.h"
 
 // state and memory lists (listas encadeadas para cada estado)
 struct PCB *_create, *_ready, *_running, *_finish, *_blocked, *_susBlocked, *_susReady;
 
 int _memSize, _diskSize;
-int _quantum; // quantum RoundRobin
+int _quantum = -1; // quantum RoundRobin
 int _time; // tempo do sistema
+char _scaling_type = 'd'; // char para algoritmo de escalonamento, com valor default 'd'
 int _nprocs;
 int _pcount;
 
@@ -44,6 +46,13 @@ int main(int argc, char *argv[])
     buffp += count + 1; // advances line + \n
     
     sscanf(line, "%d %d", &_memSize, &_quantum);
+
+    // If the quantum reading is null, then it reads the scaling algorithm
+    if (_quantum == -1) {
+        sscanf(line, "%d %c", &_memSize, &_scaling_type);
+        init_scaling(_scaling_type);
+    }
+
     _diskSize = 100; // fixed size, should be enough
     
     // read line, scan number of processes
@@ -52,7 +61,7 @@ int main(int argc, char *argv[])
     sscanf(line, "%d", &_nprocs);
     
     /*debug*/
-    //printf("Mem:%d Disk:%d Q:%d NProcs:%d\n", _memSize, _diskSize, _quantum, _nprocs);
+    // printf("Mem:%d Disk:%d Quantum:%d Scaling:%c NProcs:%d\n", _memSize, _diskSize, _quantum, _scaling_type, _nprocs);
     
     // Initialize queues with empty
     _create = _ready = _running = _finish = _blocked = _susBlocked = _susReady = NULL;    
@@ -81,8 +90,10 @@ int main(int argc, char *argv[])
             p = PCB_new(++_pcount);
 
             int arrival_time; // Variavel auxiliar para nao usar nextT
-
             int params = sscanf(line, "%d %d %db%d", &arrival_time, &p->remaining_time, &p->block_moment, &p->block_time);
+
+            p->arrival_time = arrival_time;
+            p->total_execution_time = p->remaining_time;
 
             // se não conseguimos ler valores para o block, reseta o block moment
             if (params < 4)
@@ -130,12 +141,18 @@ int main(int argc, char *argv[])
                 printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
 
                 quantum_timer = 0; // Reseta quantum
-            } else if (quantum_timer == _quantum) { // Caso o quantum estourar para o processo
-                PCB* p = Pop(&_running);
-                p->state = READY;
+            }
 
-                Push(&_ready, p); // Volta para o fim da fila ready, dando lugar ao proximo processo
-                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+            // Call for preemption check based on scaling algorithm
+            PCB* process = check_preemption(_running, &_ready, &quantum_timer, _quantum);
+
+            if (process != NULL) {
+                Pop(&_running);
+
+                process->state = READY;
+
+                Push(&_ready, process); // Volta para o fim da fila ready, dando lugar ao proximo processo
+                printf("%02d:P%d -> %s (%d)\n", _time, process->id, states[process->state], process->remaining_time);
 
                 quantum_timer = 0; // Reseta o timer do quantum
             }
@@ -248,14 +265,17 @@ int main(int argc, char *argv[])
         
         // Se nao houver processo executando mas houver processo pronto, adiciona o processo na execucao
         if (_running == NULL && _ready != NULL) {
-            PCB* p = Pop(&_ready);
-            p->state = RUN;
+            PCB* next_process = select_process(&_ready);
 
-            Push(&_running, p);
+            if (next_process) {
+                next_process->state = RUN;
 
-            quantum_timer = 0;
+                Push(&_running, next_process);
 
-            printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+                quantum_timer = 0;
+
+                printf("%02d:P%d -> %s (%d)\n", _time, next_process->id, states[next_process->state], next_process->remaining_time);
+            }
         }
 
         // finalizando

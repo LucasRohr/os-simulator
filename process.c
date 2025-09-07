@@ -13,6 +13,8 @@ struct PCB* PCB_new(int id){
     p->next = NULL;
     p->remaining_time = 0;
     p->cpu_time_executed = 0;
+    p->total_execution_time = 0;
+    p->arrival_time = 0;
     p->block_moment = -1;
     p->block_time = 0;
     return p;
