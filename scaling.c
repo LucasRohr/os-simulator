@@ -97,6 +97,10 @@ PCB* select_process(PCB** ready_queue) {
 
 // Confere se há preempção e qual lógica usar conforme algoritmo
 PCB* check_preemption(PCB *running_process, PCB** ready_queue, int* quantum_timer, int quantum) {
+    if (running_process == NULL) {
+        return NULL;
+    }
+
     switch (current_scaling) {
         case ROUND_ROBIN:
             // Para RR, há preempção caso estourar o quantum

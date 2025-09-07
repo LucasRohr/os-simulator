@@ -132,29 +132,31 @@ int main(int argc, char *argv[])
 
                 memory_process_total--; // Libera um espaço na memória
                 quantum_timer = 0; // Reseta quantum
-            } else if (_running->block_moment != -1 && (_running->cpu_time_executed == _running->block_moment)) { // Se bloqueou por block_moment, bota na fila de blocked
-                PCB* p = Pop(&_running);
-                p->state = BLOCK;
+            } else {
+                // Call for preemption check based on scaling algorithm
+                PCB* process = check_preemption(_running, &_ready, &quantum_timer, _quantum);
+    
+                if (process != NULL) {
+                    Pop(&_running);
+    
+                    process->state = READY;
+    
+                    Push(&_ready, process); // Volta para o fim da fila ready, dando lugar ao proximo processo
+                    printf("%02d:P%d -> %s (%d)\n", _time, process->id, states[process->state], process->remaining_time);
+    
+                    quantum_timer = 0; // Reseta o timer do quantum
+                }
+                
+                if (_running->block_moment != -1 && (_running->cpu_time_executed == _running->block_moment)) { // Se bloqueou por block_moment, bota na fila de blocked
+                    PCB* p = Pop(&_running);
+                    p->state = BLOCK;
 
-                Push(&_blocked, p);
+                    Push(&_blocked, p);
 
-                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
+                    printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
 
-                quantum_timer = 0; // Reseta quantum
-            }
-
-            // Call for preemption check based on scaling algorithm
-            PCB* process = check_preemption(_running, &_ready, &quantum_timer, _quantum);
-
-            if (process != NULL) {
-                Pop(&_running);
-
-                process->state = READY;
-
-                Push(&_ready, process); // Volta para o fim da fila ready, dando lugar ao proximo processo
-                printf("%02d:P%d -> %s (%d)\n", _time, process->id, states[process->state], process->remaining_time);
-
-                quantum_timer = 0; // Reseta o timer do quantum
+                    quantum_timer = 0; // Reseta quantum
+                }
             }
         }
 
