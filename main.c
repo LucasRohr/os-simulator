@@ -4,14 +4,18 @@
 #include "process.h"
 #include "scaling.h"
 
+#define MAX_PROCESSORS 10
+
 // state and memory lists (listas encadeadas para cada estado)
-struct PCB *_create, *_ready, *_running, *_finish, *_blocked, *_susBlocked, *_susReady;
+struct PCB *_create, *_ready, *_finish, *_blocked, *_susBlocked, *_susReady;
+struct PCB *_running[MAX_PROCESSORS]; // Suporte para multiplos processadores (alteração da fila de running)
 
 int _memSize, _diskSize;
 int _quantum = -1; // quantum RoundRobin
 int _time; // tempo do sistema
 char _scaling_type = 'd'; // char para algoritmo de escalonamento, com valor default 'd'
 int _nprocs;
+int _nprocessors = -1; // Total de processadores
 int _pcount;
 
 // default input no caso de não receber nada
@@ -45,12 +49,17 @@ int main(int argc, char *argv[])
     sscanf(buffp, "%99[^\n]%n", line, &count);
     buffp += count + 1; // advances line + \n
     
-    sscanf(line, "%d %d", &_memSize, &_quantum);
+    sscanf(line, "%d %d %d", &_memSize, &_quantum, &_nprocessors);
 
     // If the quantum reading is null, then it reads the scaling algorithm
     if (_quantum == -1) {
         sscanf(line, "%d %c", &_memSize, &_scaling_type);
         init_scaling(_scaling_type);
+    }
+
+    // If didn't received the number of processors, uses 1 as default
+    if (_nprocessors == -1) {
+        _nprocessors = 1;
     }
 
     _diskSize = 100; // fixed size, should be enough
@@ -64,7 +73,11 @@ int main(int argc, char *argv[])
     // printf("Mem:%d Disk:%d Quantum:%d Scaling:%c NProcs:%d\n", _memSize, _diskSize, _quantum, _scaling_type, _nprocs);
     
     // Initialize queues with empty
-    _create = _ready = _running = _finish = _blocked = _susBlocked = _susReady = NULL;    
+    _create = _ready = _finish = _blocked = _susBlocked = _susReady = NULL;
+
+    for (int i = 0; i < _nprocessors; i++) {
+        _running[i] = NULL;
+    }
     
     // read first process time
     sscanf(buffp, "%99[^\n]%n", line, &count);
@@ -79,7 +92,6 @@ int main(int argc, char *argv[])
 
     int nFinished = 0;  // reseta número de terminados
     int memory_process_total = 0; // Count para processos na memoria
-    int quantum_timer = 0; // Timer para quantum de processo
     PCB* p = NULL;      // variavel auxiliar
 
     // se finalizamos todos os processos, terminamos a simulação
@@ -115,47 +127,48 @@ int main(int argc, char *argv[])
         // Implementacao do processamento de cada estado
         //////////////
 
-        // Processo executando (running)
-        if(_running != NULL) {
-            _running->remaining_time--;  // Decrementa o tempo de vida
-            _running->cpu_time_executed++;
-            quantum_timer++;             // Incrementa o tempo que processo tá na CPU
+        // Processo executando (running) iterando cada processador
+        for (int i = 0; i < _nprocessors; i++) {
+            if(_running[i] != NULL) {
+                PCB* _running_process = _running[i];
 
-            // Se processo terminou, tira da fila de running e coloca na de finished
-            if (_running->remaining_time <= 0) {
-                PCB* p = Pop(&_running);
-                p->state = FINISH;
-
-                Push(&_finish, p);
-
-                printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
-
-                memory_process_total--; // Libera um espaço na memória
-                quantum_timer = 0; // Reseta quantum
-            } else {
-                // Call for preemption check based on scaling algorithm
-                PCB* process = check_preemption(_running, &_ready, &quantum_timer, _quantum);
+                _running_process->remaining_time--;  // Decrementa o tempo de vida
+                _running_process->cpu_time_executed++;
+                _running_process->quantum_timer++;   // Incrementa o tempo que processo tá na CPU
     
-                if (process != NULL) {
-                    Pop(&_running);
+                // Se processo terminou, tira da fila de running e coloca na de finished
+                if (_running_process->remaining_time <= 0) {
+                    _running_process->state = FINISH;
     
-                    process->state = READY;
+                    Push(&_finish, _running_process);
     
-                    Push(&_ready, process); // Volta para o fim da fila ready, dando lugar ao proximo processo
-                    printf("%02d:P%d -> %s (%d)\n", _time, process->id, states[process->state], process->remaining_time);
+                    printf("%02d:P%d -> %s (%d)\n", _time, _running_process->id, states[_running_process->state], _running_process->remaining_time);
     
-                    quantum_timer = 0; // Reseta o timer do quantum
-                }
-                
-                if (_running->block_moment != -1 && (_running->cpu_time_executed == _running->block_moment)) { // Se bloqueou por block_moment, bota na fila de blocked
-                    PCB* p = Pop(&_running);
-                    p->state = BLOCK;
+                    memory_process_total--; // Libera um espaço na memória
+                    _running[i] = NULL; // Libera processador
+                } else {
+                    // Call for preemption check based on scaling algorithm
+                    PCB* process = check_preemption(_running_process, &_ready, &_running_process->quantum_timer, _quantum);
+        
+                    if (process != NULL) {
+                        process->state = READY;
+                        
+                        Push(&_ready, process); // Volta para o fim da fila ready, dando lugar ao proximo processo
 
-                    Push(&_blocked, p);
+                        printf("%02d:P%d -> %s (%d)\n", _time, process->id, states[process->state], process->remaining_time);
 
-                    printf("%02d:P%d -> %s (%d)\n", _time, p->id, states[p->state], p->remaining_time);
-
-                    quantum_timer = 0; // Reseta quantum
+                        _running[i] = NULL; // Libera processador
+                    }
+                    
+                    if (_running_process->block_moment != -1 && (_running_process->cpu_time_executed == _running_process->block_moment)) { // Se bloqueou por block_moment, bota na fila de blocked
+                        _running_process->state = BLOCK;
+    
+                        Push(&_blocked, _running_process);
+    
+                        printf("%02d:P%d -> %s (%d)\n", _time, _running_process->id, states[_running_process->state], _running_process->remaining_time);
+    
+                        _running[i] = NULL; // Libera processador
+                    }
                 }
             }
         }
@@ -266,17 +279,18 @@ int main(int argc, char *argv[])
         }
         
         // Se nao houver processo executando mas houver processo pronto, adiciona o processo na execucao
-        if (_running == NULL && _ready != NULL) {
-            PCB* next_process = select_process(&_ready);
+        for (int i = 0; i < _nprocessors; i++) {
+            if (_running[i] == NULL && _ready != NULL) {
+                PCB* next_process = select_process(&_ready);
 
-            if (next_process) {
-                next_process->state = RUN;
+                if (next_process) {
+                    next_process->state = RUN;
+                    next_process->quantum_timer = 0;
+        
+                    _running[i] = next_process;
 
-                Push(&_running, next_process);
-
-                quantum_timer = 0;
-
-                printf("%02d:P%d -> %s (%d)\n", _time, next_process->id, states[next_process->state], next_process->remaining_time);
+                    printf("%02d:P%d -> %s (%d) Processor: [%d]\n", _time, next_process->id, states[next_process->state], next_process->remaining_time, i + 1);
+                }
             }
         }
 

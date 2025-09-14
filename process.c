@@ -17,6 +17,7 @@ struct PCB* PCB_new(int id){
     p->arrival_time = 0;
     p->block_moment = -1;
     p->block_time = 0;
+    p->quantum_timer = 0;
     return p;
 }
 

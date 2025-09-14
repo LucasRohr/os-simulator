@@ -29,6 +29,7 @@ typedef struct PCB {
     int arrival_time;         // FIFO
     int block_moment;
     int block_time;
+    int quantum_timer; // Para multiprocessamento
     struct PCB *next; // ponteiro para proximo PCB
 } PCB;
 
