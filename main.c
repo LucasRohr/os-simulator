@@ -51,13 +51,13 @@ int main(int argc, char *argv[])
     
     sscanf(line, "%d %d %d", &_memSize, &_quantum, &_nprocessors);
 
-    // If the quantum reading is null, then it reads the scaling algorithm
+    // Se o valor do quantum não foi informado, tenta ler o algoritmo de escalonamento no lugar
     if (_quantum == -1) {
-        sscanf(line, "%d %c", &_memSize, &_scaling_type);
+        sscanf(line, "%d %c %d", &_memSize, &_scaling_type, &_nprocessors);
         init_scaling(_scaling_type);
     }
 
-    // If didn't received the number of processors, uses 1 as default
+    // Usa um processador por default se não recebeu valor
     if (_nprocessors == -1) {
         _nprocessors = 1;
     }
@@ -75,6 +75,7 @@ int main(int argc, char *argv[])
     // Initialize queues with empty
     _create = _ready = _finish = _blocked = _susBlocked = _susReady = NULL;
 
+    // Inicializa lista de processadores (multiprocessamento)
     for (int i = 0; i < _nprocessors; i++) {
         _running[i] = NULL;
     }
@@ -147,7 +148,7 @@ int main(int argc, char *argv[])
                     memory_process_total--; // Libera um espaço na memória
                     _running[i] = NULL; // Libera processador
                 } else {
-                    // Call for preemption check based on scaling algorithm
+                    // Chama a função para ver se há preempção com base no algoritmo escolhido
                     PCB* process = check_preemption(_running_process, &_ready, &_running_process->quantum_timer, _quantum);
         
                     if (process != NULL) {

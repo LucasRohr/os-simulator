@@ -138,7 +138,7 @@ PCB* check_preemption(PCB *running_process, PCB** ready_queue, int* quantum_time
 
         case FIFO:
         case SJF:
-            // Algoritmos não-preemptivos nunca sofrem preempção
+            // Algoritmos não-preemptivos não tem preempção
             return NULL;
     }
 
