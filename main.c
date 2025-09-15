@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
                 PCB* _running_process = _running[i];
 
                 _running_process->remaining_time--;  // Decrementa o tempo de vida
-                _running_process->cpu_time_executed++;
+                _running_process->cpu_time_executed++; // Incrementa o tempo de CPU executado
                 _running_process->quantum_timer++;   // Incrementa o tempo que processo tá na CPU
     
                 // Se processo terminou, tira da fila de running e coloca na de finished
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
                     // Chama a função para ver se há preempção com base no algoritmo escolhido
                     PCB* process = check_preemption(_running_process, &_ready, &_running_process->quantum_timer, _quantum);
         
-                    if (process != NULL) {
+                    if (process != NULL) { // Se tiver preempção
                         process->state = READY;
                         
                         Push(&_ready, process); // Volta para o fim da fila ready, dando lugar ao proximo processo
@@ -179,6 +179,7 @@ int main(int argc, char *argv[])
             PCB *current = _blocked;
             PCB *prev = NULL;
 
+            // Percorre fila de bloqueados
             while (current != NULL) {
                 current->block_time--;
 
@@ -191,7 +192,7 @@ int main(int argc, char *argv[])
                     } else {
                         prev->next = current->next;
                     }
-                    current = current->next;
+                    current = current->next; // Avança o current
 
                     // Adiciona na fila de prontos (ready)
                     unblocked_process->state = READY;
@@ -199,7 +200,7 @@ int main(int argc, char *argv[])
 
                     printf("%02d:P%d -> %s (%d)\n", _time, unblocked_process->id, states[unblocked_process->state], unblocked_process->remaining_time);
                 } else {
-                    // Continua para o próximo da lista
+                    // Apenas continua para o próximo da lista caso não esteja desbloqueado
                     prev = current;
                     current = current->next;
                 }
@@ -211,6 +212,7 @@ int main(int argc, char *argv[])
             PCB *current = _susBlocked;
             PCB *prev = NULL;
 
+            // Percorre fila de suspensos bloqueados
             while (current != NULL) {
                 current->block_time--;
 
@@ -223,7 +225,7 @@ int main(int argc, char *argv[])
                     } else {
                         prev->next = current->next;
                     }
-                    current = current->next; // Avança o ponteiro
+                    current = current->next; // Avança o current
 
                     // Move para a fila de PRONTOS/SUSPENSOS (_susReady)
                     unblocked_process->state = SUS_READY;
@@ -237,7 +239,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Se a memória está cheia e tem processos esperando para entrar
+        // Se a memória está cheia e tem processos esperando para entrar (checagem da fila de processos suspensos prontos)
         if (memory_process_total >= _memSize && (_create != NULL || _susReady != NULL)) {
             // Se tiver processo bloqueado
             if (_blocked != NULL) {
@@ -255,11 +257,12 @@ int main(int argc, char *argv[])
         while (_create != NULL) {
             PCB* p = Pop(&_create);
 
+            // Se tiver espaço da memória, vai para pronto
             if (memory_process_total < _memSize) {
                 p->state = READY;
                 Push(&_ready, p);
                 memory_process_total++;
-            } else {
+            } else { // Se não, vai para pronto E suspenso ("disco")
                 p->state = SUS_READY;
                 Push(&_susReady, p);
             }
@@ -280,6 +283,7 @@ int main(int argc, char *argv[])
         }
         
         // Se nao houver processo executando mas houver processo pronto, adiciona o processo na execucao
+        // Nesse caso, faz isso considerando a lista de processadores (multiprocessamento)
         for (int i = 0; i < _nprocessors; i++) {
             if (_running[i] == NULL && _ready != NULL) {
                 PCB* next_process = select_process(&_ready);
