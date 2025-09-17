@@ -1,6 +1,6 @@
 #include "scaling.h"
 
-static ScalingType current_scaling;
+static ScalingType current_scaling = ROUND_ROBIN;
 
 // Atribui algoritmo de escalonamento
 void init_scaling(char algorithm_char) {
