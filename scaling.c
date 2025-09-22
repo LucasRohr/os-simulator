@@ -1,3 +1,5 @@
+// Nome: Lucas Rohr Carreño
+
 #include "scaling.h"
 
 static ScalingType current_scaling = ROUND_ROBIN;

@@ -1,3 +1,5 @@
+// Nome: Lucas Rohr Carreño
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

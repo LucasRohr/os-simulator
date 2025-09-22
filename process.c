@@ -1,3 +1,5 @@
+// Nome: Lucas Rohr Carreño
+
 #include "process.h"
 
 // Definição do array de strings dos estados

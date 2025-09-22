@@ -1,3 +1,7 @@
+// Nome: Lucas Rohr Carreño
+// Esse arquivo na verdade é um .h, tive que botar como .txt no final porque no Moodle não aceitava .h
+// Favor mudar para .h ao executar trabalho, obrigado!
+
 #ifndef PROCESS_H
 #define PROCESS_H
 
